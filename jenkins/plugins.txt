@@ -1,0 +1,15 @@
+prometheus
+email-ext
+sonar
+nodejs
+docker-workflow
+kubernetes
+docker-commons
+docker-pipeline
+docker-api
+docker-build-step
+kubernetes-credentials
+kubernetes-client-api
+kubernetes-cli
+kubernetes-credential-provider
+owasp-dependency-check

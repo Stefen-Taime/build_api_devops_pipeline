@@ -1,0 +1,111 @@
+pipeline { 
+    agent any
+    tools { 
+        jdk 'jdk'
+        nodejs 'nodejs'
+    }
+    environment { 
+        SCANNER_HOME = tool 'sonar-server'
+    }
+    stages { 
+        stage('Clean Workspace') { 
+            steps { 
+                cleanWs() 
+            } 
+        } 
+        stage('Git Checkout') { 
+            steps { 
+                git branch: 'master', url: 'https://github.com/AmanPathak-DevOps/Netflix-Clone-K8S-End-to-End-Project.git'
+            } 
+        } 
+        stage('Run SonarQube') {
+            steps {
+                withSonarQubeEnv('sonar-server') { 
+                    sh """
+                        ${SCANNER_HOME}/bin/sonar-scanner \
+                        -Dsonar.projectKey=Netflix \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=http://172.20.0.3:9000 \
+                        -Dsonar.login=sqp_11b1570a26e3b3716c128f473bbb0f24f691a81e\
+                        -X
+                    """
+                } 
+            } 
+        }
+        stage('SonarQube Quality Gate') {
+            steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token' 
+                }
+            } 
+        }
+        stage('Install NPM Dependencies') { 
+            steps { 
+                sh "npm install"
+            } 
+        }
+        stage('OWASP Dependency Scan') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'owasp-dp-check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        stage('Trivy Filesystem Scan') {
+            steps {
+                sh "trivy fs . > trivyfs.txt"
+            }
+        }
+        stage("Prep Docker Environment"){
+            steps{
+                script{
+                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
+                       sh "docker system prune -f"
+                       sh "docker container prune -f"
+                    }
+                }
+            }
+        }
+        stage('Build and Push Docker') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
+                        sh "docker build --build-arg TMDB_V3_API_KEY=0bd9a3d05b6b807f6ce03d829daa4470 -t netflix ."
+                        sh "docker tag netflix stefen2020/netflix:latest"
+                        sh "docker push stefen2020/netflix:latest"
+                    }
+                }
+            }
+        }
+        stage('Trivy Docker Image Scan') {
+            steps {
+                sh "trivy image stefen2020/netflix:latest > trivyimage.txt"
+            }
+        }
+        stage('List K8s Configs') {
+            steps {
+                sh 'ls -la Kubernetes/'
+            }
+        }
+        stage('Deploy to K8s') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KUBECONFIG')]) {
+                    sh 'kubectl apply -f Kubernetes/deployment.yml --validate=false --insecure-skip-tls-verify=true'
+                    sh 'kubectl apply -f Kubernetes/service.yml'
+                    sh 'kubectl get svc'
+                    sh 'kubectl get all'
+                }
+            }
+        }
+    }
+    post { 
+        always { 
+            emailext attachLog: true, 
+                subject: "'${currentBuild.result}'", 
+                body: "Project: ${env.JOB_NAME}<br/>" +
+                      "Build Number: ${env.BUILD_NUMBER}<br/>" +
+                      "URL: ${env.BUILD_URL}<br/>", 
+                to: 'stefentaime@gmail.com', 
+                attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
+        } 
+    } 
+}
