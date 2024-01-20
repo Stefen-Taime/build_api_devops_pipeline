@@ -15,7 +15,7 @@ pipeline {
         } 
         stage('Git Checkout') { 
             steps { 
-                git branch: 'master', url: 'https://github.com/Stefen-Taime/build_api_devops_pipeline.git'
+                git branch: 'main', url: 'https://github.com/Stefen-Taime/build_api_devops_pipeline.git'
             } 
         } 
         stage('Run SonarQube') {
@@ -49,15 +49,16 @@ pipeline {
 
         stage('Install pip Dependencies') {
             steps {
-                sh '''
+                sh '''#!/bin/bash
                     python3 -m venv venv
                     source venv/bin/activate
-                    pip install -r api/requirements.txt 
+                    pip install -r api/requirements.txt
                 '''
             }
         }
 
-        stage('Display Python and Pandas Versions') {
+
+        stage('Display Python Versions') {
             steps {
                 sh '''
                     . venv/bin/activate
@@ -92,13 +93,13 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh "docker build --build-arg TMDB_V3_API_KEY=0bd9a3d05b6b807f6ce03d829daa4470 -t api ."
-                        sh "docker tag api stefen2020/api:latest"
+                        sh "docker build -t stefen2020/api:latest ./api"
                         sh "docker push stefen2020/api:latest"
                     }
                 }
             }
         }
+
         stage('Trivy Docker Image Scan') {
             steps {
                 sh "trivy image stefen2020/api:latest > trivyimage.txt"
