@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-devops
+  labels:
+    app: api-devops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-devops
+  template:
+    metadata:
+      labels:
+        app: api-devops
+    spec:
+      containers:
+      - name: api-devops
+        image: stefen2020/api:latest
+        ports:
+        - containerPort: 8000

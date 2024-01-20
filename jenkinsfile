@@ -15,7 +15,7 @@ pipeline {
         } 
         stage('Git Checkout') { 
             steps { 
-                git branch: 'master', url: 'https://github.com/AmanPathak-DevOps/Netflix-Clone-K8S-End-to-End-Project.git'
+                git branch: 'master', url: 'https://github.com/Stefen-Taime/build_api_devops_pipeline.git'
             } 
         } 
         stage('Run SonarQube') {
@@ -23,10 +23,10 @@ pipeline {
                 withSonarQubeEnv('sonar-server') { 
                     sh """
                         ${SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=Netflix \
+                        -Dsonar.projectKey=api \
                         -Dsonar.sources=. \
                         -Dsonar.host.url=http://172.20.0.3:9000 \
-                        -Dsonar.login=sqp_11b1570a26e3b3716c128f473bbb0f24f691a81e\
+                        -Dsonar.login=sqp_bc9902ae1276cf62f50c38719f743a6b1ed2c401\
                         -X
                     """
                 } 
@@ -39,11 +39,34 @@ pipeline {
                 }
             } 
         }
-        stage('Install NPM Dependencies') { 
-            steps { 
-                sh "npm install"
-            } 
+        stage('Create and Activate Virtual Environment') {
+            steps {
+                sh '''
+                    python3 -m venv venv
+                '''
+            }
         }
+
+        stage('Install pip Dependencies') {
+            steps {
+                sh '''
+                    python3 -m venv venv
+                    source venv/bin/activate
+                    pip install -r api/requirements.txt 
+                '''
+            }
+        }
+
+        stage('Display Python and Pandas Versions') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    echo "Python version:"
+                    python3 --version
+                '''
+            }
+        }
+
         stage('OWASP Dependency Scan') {
             steps {
                 dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'owasp-dp-check'
@@ -69,28 +92,28 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh "docker build --build-arg TMDB_V3_API_KEY=0bd9a3d05b6b807f6ce03d829daa4470 -t netflix ."
-                        sh "docker tag netflix stefen2020/netflix:latest"
-                        sh "docker push stefen2020/netflix:latest"
+                        sh "docker build --build-arg TMDB_V3_API_KEY=0bd9a3d05b6b807f6ce03d829daa4470 -t api ."
+                        sh "docker tag api stefen2020/api:latest"
+                        sh "docker push stefen2020/api:latest"
                     }
                 }
             }
         }
         stage('Trivy Docker Image Scan') {
             steps {
-                sh "trivy image stefen2020/netflix:latest > trivyimage.txt"
+                sh "trivy image stefen2020/api:latest > trivyimage.txt"
             }
         }
         stage('List K8s Configs') {
             steps {
-                sh 'ls -la Kubernetes/'
+                sh 'ls -la'
             }
         }
         stage('Deploy to K8s') {
             steps {
                 withCredentials([file(credentialsId: 'kubeconfig-file', variable: 'KUBECONFIG')]) {
-                    sh 'kubectl apply -f Kubernetes/deployment.yml --validate=false --insecure-skip-tls-verify=true'
-                    sh 'kubectl apply -f Kubernetes/service.yml'
+                    sh 'kubectl apply -f kubernetes/deployment.yml --validate=false --insecure-skip-tls-verify=true'
+                    sh 'kubectl apply -f kubernetes/service.yml'
                     sh 'kubectl get svc'
                     sh 'kubectl get all'
                 }
